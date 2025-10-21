@@ -70,8 +70,8 @@ class Order(models.Model):
     )
 
     class Meta:
-        verbose_name = 'Заказ',
-        verbose_name_plural = 'Заказы',
+        verbose_name = 'Заказ'
+        verbose_name_plural = 'Заказы'
         ordering = ['-created_at']
 
     def __str__(self):
