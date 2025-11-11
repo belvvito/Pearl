@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Your custom colors -->
+    <color name="pearl_primary">#FF87CEEB</color>
+    <color name="pearl_secondary">#FFE6E6FA</color>
+    <color name="pearl_accent">#FFFFB6C1</color>
+    <color name="pearl_white">#FFFFFFFF</color>
+    <color name="pearl_dark_gray">#FF333333</color>
+    <color name="pearl_light_gray">#FFF5F5F5</color>
+
+    <!-- Добавьте эти цвета -->
+    <color name="pearl_gray">#FF808080</color>
+    <color name="pearl_light_lavender">#FFF0E6FA</color>
+    <color name="pearl_beige">#FFF5F5DC</color>
+
+    <!-- Базовые цвета -->
+    <color name="white">#FFFFFFFF</color>
+    <color name="black">#FF000000</color>
+</resources>
