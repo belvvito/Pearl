@@ -43,6 +43,21 @@ class Review(models.Model):
     comment = models.TextField(
         verbose_name='Текст отзыва'
     )
+    # Атрибуты оценки товара (критерии)
+    # Хранятся как JSON для гибкости
+    rating_attributes = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name='Атрибуты оценки',
+        help_text='Критерии оценки товара (качество, цена, упаковка, эффективность и т.д.)'
+    )
+    # Объяснение оценки (почему такая оценка)
+    rating_explanation = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name='Объяснение оценки',
+        help_text='Почему пользователь поставил такую оценку'
+    )
     is_approved = models.BooleanField(
         default=False,
         verbose_name='Одобрен'
@@ -68,3 +83,32 @@ class Review(models.Model):
 
     def __str__(self):
         return f"Отзыв от {self.user.username} на {self.product.name}"
+
+
+class ReviewLike(models.Model):
+    """Модель для лайков отзывов"""
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='review_likes',
+        verbose_name='Пользователь'
+    )
+    review = models.ForeignKey(
+        Review,
+        on_delete=models.CASCADE,
+        related_name='likes',
+        verbose_name='Отзыв'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='Дата создания'
+    )
+
+    class Meta:
+        verbose_name = 'Лайк отзыва'
+        verbose_name_plural = 'Лайки отзывов'
+        unique_together = ['user', 'review']
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Лайк от {self.user.username} на отзыв #{self.review.id}"

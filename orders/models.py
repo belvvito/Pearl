@@ -47,6 +47,14 @@ class Order(models.Model):
         verbose_name='Общая сумма',
         validators=[MinValueValidator(0)]
     )
+    bonus_points_used = models.IntegerField(
+        default=0,
+        verbose_name='Использовано бонусных баллов'
+    )
+    bonus_points_earned = models.IntegerField(
+        default=0,
+        verbose_name='Начислено бонусных баллов'
+    )
     shipping_address = models.TextField(
         verbose_name='Адрес доставки'
     )

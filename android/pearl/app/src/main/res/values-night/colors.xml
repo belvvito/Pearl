@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <color name="pearl_primary">#FF4A90E2</color>
-    <color name="pearl_secondary">#FF7B68EE</color>
-    <color name="pearl_accent">#FFFF69B4</color>
-    <color name="pearl_white">#FFFFFFFF</color>
-    <color name="pearl_dark_gray">#FF121212</color>
-    <color name="pearl_light_gray">#FF1E1E1E</color>
-</resources>
