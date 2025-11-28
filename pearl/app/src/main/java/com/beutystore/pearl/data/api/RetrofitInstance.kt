@@ -27,17 +27,6 @@ object RetrofitInstance {
     fun initialize(appContext: Context) {
         context = appContext.applicationContext
         serverConfigManager = ServerConfigManager(appContext.applicationContext)
-        
-        // Проверяем и исправляем URL, если он содержит HTTPS для локальных адресов
-        val currentUrl = serverConfigManager?.getServerUrl() ?: ""
-        if (currentUrl.startsWith("https://") && 
-            (currentUrl.contains("10.0.2.2") || currentUrl.contains("192.168.") || 
-             currentUrl.contains("127.0.0.1") || currentUrl.contains("localhost"))) {
-            // Сбрасываем настройки, чтобы использовать значение из BuildConfig
-            serverConfigManager?.resetToDefault()
-            android.util.Log.w("RetrofitInstance", "Reset invalid HTTPS URL for local server")
-        }
-        
         // Сбрасываем retrofit, чтобы он пересоздался с новым URL
         _retrofit = null
         _api = null
@@ -49,10 +38,7 @@ object RetrofitInstance {
      * иначе берется из BuildConfig.
      */
     private fun getBaseUrl(): String {
-        val url = serverConfigManager?.getServerUrl() ?: com.beutystore.pearl.BuildConfig.BASE_URL
-        // Логируем используемый URL для отладки
-        android.util.Log.d("RetrofitInstance", "Using BASE_URL: $url")
-        return url
+        return serverConfigManager?.getServerUrl() ?: com.beutystore.pearl.BuildConfig.BASE_URL
     }
 
     /**

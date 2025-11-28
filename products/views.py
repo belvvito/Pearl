@@ -17,10 +17,41 @@ from django.db.models import Q, Count, Avg
 from django.db import models
 from django.http import JsonResponse, HttpResponse, Http404
 from django.views.decorators.cache import cache_page
+from django.core.cache import cache
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 import urllib.parse
+import hashlib
+import os
+from django.conf import settings
 from .models import Product
 from .serializers import ProductSerializer
+
+# Создаем глобальную session для переиспользования соединений
+_session = None
+
+def get_session():
+    """Создает и возвращает глобальную session с оптимизированными настройками."""
+    global _session
+    if _session is None:
+        _session = requests.Session()
+        # Настройка retry стратегии - убираем retry для таймаутов
+        retry_strategy = Retry(
+            total=2,  # Уменьшаем количество попыток
+            backoff_factor=0.5,  # Уменьшаем задержку
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["GET"],
+            respect_retry_after_header=True
+        )
+        adapter = HTTPAdapter(
+            max_retries=retry_strategy,
+            pool_connections=10,
+            pool_maxsize=20
+        )
+        _session.mount("http://", adapter)
+        _session.mount("https://", adapter)
+    return _session
 
 
 class ProductViewSet(viewsets.ReadOnlyModelViewSet):
@@ -281,7 +312,7 @@ def proxy_image(request):
     
     Назначение:
     - Решает проблему с подключением Android эмулятора к внешним серверам
-    - Позволяет кэшировать изображения на сервере
+    - Кэширует изображения на диске для быстрого доступа
     - Обеспечивает единообразную обработку ошибок
     
     Параметры:
@@ -305,48 +336,114 @@ def proxy_image(request):
         
         # Декодируем URL изображения (из URL-encoded формата)
         image_url = urllib.parse.unquote(encoded_url)
-        logger.info(f"Проксирование изображения: {image_url[:100]}...")
+        
+        # Создаем хэш URL для имени файла кэша
+        url_hash = hashlib.md5(image_url.encode('utf-8')).hexdigest()
+        
+        # Путь для кэширования изображений
+        cache_dir = os.path.join(settings.MEDIA_ROOT, 'cached_images')
+        os.makedirs(cache_dir, exist_ok=True)
+        cache_file = os.path.join(cache_dir, f"{url_hash}.cache")
+        
+        # Проверяем кэш на диске
+        if os.path.exists(cache_file):
+            try:
+                with open(cache_file, 'rb') as f:
+                    cached_content = f.read()
+                    # Определяем content type по расширению или заголовкам
+                    content_type = 'image/jpeg'  # По умолчанию
+                    if image_url.endswith('.png'):
+                        content_type = 'image/png'
+                    elif image_url.endswith('.gif'):
+                        content_type = 'image/gif'
+                    elif image_url.endswith('.webp'):
+                        content_type = 'image/webp'
+                    
+                    http_response = HttpResponse(cached_content, content_type=content_type)
+                    http_response['Cache-Control'] = 'public, max-age=86400'  # Кэш на 24 часа
+                    http_response['Access-Control-Allow-Origin'] = '*'
+                    logger.debug(f"Отдано из кэша: {len(cached_content)} байт")
+                    return http_response
+            except Exception as cache_error:
+                logger.debug(f"Ошибка чтения кэша: {cache_error}, загружаем заново")
         
         # Проверяем, что это валидный HTTP/HTTPS URL
         if not image_url.startswith('http://') and not image_url.startswith('https://'):
             logger.error(f"Невалидный URL изображения: {image_url[:100]}")
             raise Http404("Invalid image URL")
         
-        # Загружаем изображение с внешнего сервера
-        # Используем увеличенный timeout и отключаем SSL verification для разработки
+        logger.info(f"🌐 Загрузка изображения: {image_url[:100]}...")
+        
+        # Используем глобальную session для переиспользования соединений
+        session = get_session()
+        
+        # Загружаем изображение с увеличенными таймаутами
         try:
-            response = requests.get(
+            logger.info(f"📡 Отправка запроса к {image_url[:80]}...")
+            # Простой запрос без сложных заголовков
+            response = session.get(
                 image_url, 
-                timeout=60,  # Увеличенный timeout для медленных соединений
+                timeout=(5, 15),  # 5 секунд на подключение, 15 на чтение
                 stream=True,  # Потоковая загрузка для больших файлов
-                verify=False,  # Отключаем SSL verification для разработки (в production включить!)
+                verify=True,  # Включаем SSL verification
                 headers={
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
                 },
                 allow_redirects=True  # Разрешаем редиректы
             )
             response.raise_for_status()  # Выбрасывает исключение при HTTP ошибке
-        except requests.exceptions.Timeout:
-            logger.error(f"Timeout при загрузке {image_url[:100]}")
-            # Возвращаем placeholder изображение вместо ошибки
-            placeholder_svg = b'<svg width="300" height="300" xmlns="http://www.w3.org/2000/svg"><rect width="300" height="300" fill="#f0f0f0"/><text x="50%" y="50%" text-anchor="middle" dy=".3em" font-family="Arial" font-size="14" fill="#999">Image not available</text></svg>'
-            http_response = HttpResponse(placeholder_svg, content_type='image/svg+xml')
+            logger.info(f"📥 Получен ответ: статус {response.status_code}, размер {len(response.content) if hasattr(response, 'content') else 'unknown'} байт")
+            
+        except requests.exceptions.Timeout as timeout_error:
+            # Таймаут - возвращаем редирект на оригинальный URL
+            logger.warning(f"⏱️ Timeout при загрузке {image_url[:80]}, возвращаю редирект на оригинальный URL")
+            http_response = HttpResponse(status=302)
+            http_response['Location'] = image_url
             http_response['Cache-Control'] = 'no-cache'
             return http_response
+                    
         except requests.exceptions.RequestException as req_error:
-            logger.error(f"Ошибка запроса при загрузке {image_url[:100]}: {req_error}")
-            # Возвращаем placeholder изображение вместо ошибки
-            placeholder_svg = b'<svg width="300" height="300" xmlns="http://www.w3.org/2000/svg"><rect width="300" height="300" fill="#f0f0f0"/><text x="50%" y="50%" text-anchor="middle" dy=".3em" font-family="Arial" font-size="14" fill="#999">Image not available</text></svg>'
-            http_response = HttpResponse(placeholder_svg, content_type='image/svg+xml')
+            # Ошибка запроса - возвращаем редирект на оригинальный URL
+            logger.warning(f"⚠️ Ошибка при загрузке {image_url[:80]}: {type(req_error).__name__}, возвращаю редирект на оригинальный URL")
+            http_response = HttpResponse(status=302)
+            http_response['Location'] = image_url
             http_response['Cache-Control'] = 'no-cache'
             return http_response
+        
+        # Проверяем, что получили реальное изображение (не HTML страницу с ошибкой)
+        content = response.content
+        if len(content) < 1000:  # Слишком маленький размер - вероятно, это не изображение
+            content_str = content[:200].decode('utf-8', errors='ignore')
+            if '<html' in content_str.lower() or '<!doctype' in content_str.lower():
+                logger.warning(f"⚠️ Получен HTML вместо изображения для {image_url[:80]}")
+                placeholder_svg = b'<svg width="300" height="300" xmlns="http://www.w3.org/2000/svg"><rect width="300" height="300" fill="#f0f0f0"/><text x="50%" y="50%" text-anchor="middle" dy=".3em" font-family="Arial" font-size="14" fill="#999">Image not available</text></svg>'
+                http_response = HttpResponse(placeholder_svg, content_type='image/svg+xml')
+                http_response['Cache-Control'] = 'no-cache'
+                return http_response
+        
+        # Сохраняем в кэш на диск
+        try:
+            with open(cache_file, 'wb') as f:
+                f.write(content)
+            logger.info(f"💾 Изображение сохранено в кэш: {len(content)} байт")
+        except Exception as cache_error:
+            logger.warning(f"⚠️ Не удалось сохранить в кэш: {cache_error}")
         
         # Определяем content type из заголовков ответа
         content_type = response.headers.get('Content-Type', 'image/jpeg')
+        # Если content type не определен, пытаемся определить по содержимому
+        if content_type == 'image/jpeg' and not content.startswith(b'\xff\xd8'):
+            # Проверяем сигнатуры файлов
+            if content.startswith(b'\x89PNG'):
+                content_type = 'image/png'
+            elif content.startswith(b'GIF'):
+                content_type = 'image/gif'
+            elif content.startswith(b'RIFF') and b'WEBP' in content[:12]:
+                content_type = 'image/webp'
         
         # Создаем HTTP ответ с изображением
         http_response = HttpResponse(
-            response.content,
+            content,
             content_type=content_type
         )
         
@@ -354,13 +451,20 @@ def proxy_image(request):
         http_response['Cache-Control'] = 'public, max-age=86400'  # Кэш на 24 часа
         http_response['Access-Control-Allow-Origin'] = '*'  # Для CORS (в production ограничить!)
         
-        logger.info(f"✅ Успешно проксировано изображение: {len(response.content)} байт")
+        logger.info(f"✅ Успешно проксировано изображение: {len(content)} байт, тип: {content_type}")
         return http_response
         
     except requests.RequestException as e:
-        logger.error(f"❌ Ошибка при загрузке изображения {encoded_url[:100]}: {str(e)}")
-        # Если не удалось загрузить изображение, возвращаем 404
-        raise Http404(f"Failed to load image: {str(e)}")
+        logger.debug(f"Ошибка при загрузке изображения: {type(e).__name__}")
+        # Если не удалось загрузить изображение, возвращаем placeholder
+        placeholder_svg = b'<svg width="300" height="300" xmlns="http://www.w3.org/2000/svg"><rect width="300" height="300" fill="#f0f0f0"/><text x="50%" y="50%" text-anchor="middle" dy=".3em" font-family="Arial" font-size="14" fill="#999">Image not available</text></svg>'
+        http_response = HttpResponse(placeholder_svg, content_type='image/svg+xml')
+        http_response['Cache-Control'] = 'no-cache'
+        return http_response
     except Exception as e:
-        logger.error(f"❌ Неожиданная ошибка при проксировании изображения: {str(e)}")
-        raise Http404(f"Error: {str(e)}")
+        logger.debug(f"Неожиданная ошибка при проксировании изображения: {type(e).__name__}")
+        # Возвращаем placeholder вместо 404
+        placeholder_svg = b'<svg width="300" height="300" xmlns="http://www.w3.org/2000/svg"><rect width="300" height="300" fill="#f0f0f0"/><text x="50%" y="50%" text-anchor="middle" dy=".3em" font-family="Arial" font-size="14" fill="#999">Image not available</text></svg>'
+        http_response = HttpResponse(placeholder_svg, content_type='image/svg+xml')
+        http_response['Cache-Control'] = 'no-cache'
+        return http_response

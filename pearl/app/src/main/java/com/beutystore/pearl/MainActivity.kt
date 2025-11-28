@@ -10,6 +10,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import coil.compose.LocalImageLoader
 import com.beutystore.pearl.data.api.RetrofitInstance
+import com.beutystore.pearl.data.utils.ThemeManager
 import com.beutystore.pearl.navigation.PearlNavigation
 import com.beutystore.pearl.ui.theme.PearlTheme
 import com.beutystore.pearl.ui.utils.ImageLoaderConfig
@@ -38,7 +39,10 @@ class MainActivity : ComponentActivity() {
         
         setContent {
             // Состояние темы приложения (светлая/темная)
-            var isDarkTheme by remember { mutableStateOf(false) }
+            // Загружаем сохраненное состояние темы при первом запуске
+            var isDarkTheme by remember { 
+                mutableStateOf(ThemeManager.getSavedTheme(this))
+            }
             
             // Предоставляем кастомный ImageLoader для всего приложения через CompositionLocal
             // Это позволяет всем AsyncImage использовать настройки с увеличенными таймаутами
@@ -48,7 +52,11 @@ class MainActivity : ComponentActivity() {
                     // Инициализируем навигацию приложения
                     PearlNavigation(
                         isDarkTheme = isDarkTheme,
-                        onThemeToggle = { isDarkTheme = it }
+                        onThemeToggle = { newTheme ->
+                            isDarkTheme = newTheme
+                            // Сохраняем выбранную тему при изменении
+                            ThemeManager.saveTheme(this, newTheme)
+                        }
                     )
                 }
             }

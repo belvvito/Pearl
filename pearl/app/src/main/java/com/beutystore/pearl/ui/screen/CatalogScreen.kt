@@ -16,6 +16,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -25,12 +26,16 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import androidx.compose.ui.graphics.Color as ComposeColor
+import androidx.compose.ui.graphics.toArgb
 import com.beutystore.pearl.data.model.Product
 import com.beutystore.pearl.data.utils.SearchUtils
 import com.beutystore.pearl.ui.theme.PearlLightPeach
 import com.beutystore.pearl.ui.theme.PearlTheme
 import com.beutystore.pearl.ui.theme.PearlWhite
 import com.beutystore.pearl.ui.theme.PearlRed
+import com.beutystore.pearl.ui.theme.PearlDarkRed
+import com.beutystore.pearl.ui.theme.PearlPeach
 
 import com.beutystore.pearl.ui.components.ProductCard
 import com.beutystore.pearl.ui.viewmodel.CartViewModel
@@ -351,55 +356,91 @@ fun CategoryGridItem(
     modifier: Modifier = Modifier,
     onClick: () -> Unit = {}
 ) {
-    val imageUrl = remember(name) {
-        getCategoryImageUrl(name)
+    val gradientColors = remember(name) {
+        getCategoryGradientColors(name)
     }
 
     Card(
-        modifier = modifier.height(120.dp),
-        shape = RoundedCornerShape(16.dp),
+        modifier = modifier.height(180.dp),
+        shape = RoundedCornerShape(24.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
         onClick = onClick
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            AsyncImage(
-                model = imageUrl.ifEmpty { "https://images.unsplash.com/photo-1556228578-8c89e6adf883?w=500&q=80&fit=crop" },
-                contentDescription = name,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop,
-                error = androidx.compose.ui.graphics.painter.ColorPainter(
-                    MaterialTheme.colorScheme.surfaceVariant
-                ),
-                placeholder = androidx.compose.ui.graphics.painter.ColorPainter(
-                    MaterialTheme.colorScheme.surfaceVariant
-                )
-            )
-
-            // Gradient overlay
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(
-                                Color.Transparent,
-                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                            )
-                        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(24.dp))
+                .background(
+                    brush = Brush.horizontalGradient(
+                        colors = gradientColors
                     )
-            )
-
+                )
+        ) {
+            // Текст по центру
             Text(
                 text = name,
                 modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(12.dp),
-                color = PearlWhite,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
+                    .align(Alignment.Center)
+                    .padding(1.dp),
+                color = PearlDarkRed,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
             )
         }
     }
+}
+
+private fun getCategoryGradientColors(category: String): List<Color> {
+    // Градиенты в стиле баннеров главной страницы (оранжевые оттенки)
+    val categoryGradients = mapOf(
+        "Все товары" to listOf(
+            PearlRed.copy(alpha = 0.4f),
+            PearlPeach.copy(alpha = 0.35f),
+            PearlRed.copy(alpha = 0.4f)
+        ),
+        "Уход за лицом" to listOf(
+            PearlPeach.copy(alpha = 0.4f),
+            PearlRed.copy(alpha = 0.35f),
+            PearlPeach.copy(alpha = 0.38f)
+        ),
+        "Декоративная косметика" to listOf(
+            PearlRed.copy(alpha = 0.38f),
+            PearlPeach.copy(alpha = 0.4f),
+            PearlRed.copy(alpha = 0.35f)
+        ),
+        "Волосы" to listOf(
+            PearlPeach.copy(alpha = 0.4f),
+            PearlRed.copy(alpha = 0.38f),
+            PearlPeach.copy(alpha = 0.35f)
+        ),
+        "Парфюмерия" to listOf(
+            PearlRed.copy(alpha = 0.4f),
+            PearlPeach.copy(alpha = 0.35f),
+            PearlRed.copy(alpha = 0.4f)
+        ),
+        "Тело" to listOf(
+            PearlPeach.copy(alpha = 0.38f),
+            PearlRed.copy(alpha = 0.4f),
+            PearlPeach.copy(alpha = 0.35f)
+        ),
+        "Аксессуары" to listOf(
+            PearlRed.copy(alpha = 0.35f),
+            PearlPeach.copy(alpha = 0.4f),
+            PearlRed.copy(alpha = 0.38f)
+        ),
+        "Другое" to listOf(
+            PearlPeach.copy(alpha = 0.4f),
+            PearlRed.copy(alpha = 0.35f),
+            PearlPeach.copy(alpha = 0.38f)
+        )
+    )
+    
+    return categoryGradients[category] ?: listOf(
+        PearlRed.copy(alpha = 0.4f),
+        PearlPeach.copy(alpha = 0.35f),
+        PearlRed.copy(alpha = 0.4f)
+    )
 }
 
 @Composable
@@ -678,17 +719,31 @@ private fun EmptyProductsState(isSearching: Boolean) {
 
 // Вспомогательные функции для получения реальных изображений категорий из Unsplash
 private fun getCategoryImageUrl(category: String): String {
-    return when (category) {
-        "Все товары" -> "https://images.unsplash.com/photo-1556228578-8c89e6adf883?w=500&q=80&fit=crop"
-        "Уход за лицом" -> "https://images.unsplash.com/photo-1556228578-8c89e6adf883?w=500&q=80&fit=crop"
-        "Декоративная косметика" -> "https://images.unsplash.com/photo-1571781926291-c477ebfd024b?w=500&q=80&fit=crop"
-        "Волосы" -> "https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=500&q=80&fit=crop"
-        "Парфюмерия" -> "https://images.unsplash.com/photo-1592945403244-b3fbafd7f539?w=500&q=80&fit=crop"
-        "Тело" -> "https://images.unsplash.com/photo-1631729670470-1df5e9888c15?w=500&q=80&fit=crop"
-        "Мужская косметика" -> "https://images.unsplash.com/photo-1556228577-8ed324c4f5ab?w=500&q=80&fit=crop"
-        "Аксессуары" -> "https://images.unsplash.com/photo-1589666564452-e94edaddd8f5?w=500&q=80&fit=crop"
-        else -> "https://images.unsplash.com/photo-1556228578-8c89e6adf883?w=500&q=80&fit=crop"
-    }
+    // Цвета для разных категорий
+    val categoryColors = mapOf(
+        "Все товары" to "FF6B9D",      // Розовый
+        "Уход за лицом" to "FFB6C1",   // Светло-розовый
+        "Декоративная косметика" to "FF69B4", // Ярко-розовый
+        "Волосы" to "DDA0DD",          // Сливовый
+        "Парфюмерия" to "BA55D3",      // Средний фиолетовый
+        "Тело" to "DA70D6",            // Орхидея
+        "Аксессуары" to "EE82EE",      // Фиолетовый
+        "Другое" to "9370DB"           // Средний фиолетовый
+    )
+    
+    val color = categoryColors[category] ?: "FF6B9D"
+    
+    // Создаем SVG изображение с однотонным цветом и текстом категории
+    // Используем data URI для встраивания SVG напрямую
+    val svg = "<svg width=\"500\" height=\"300\" xmlns=\"http://www.w3.org/2000/svg\"><rect width=\"500\" height=\"300\" fill=\"#$color\"/><text x=\"50%\" y=\"50%\" font-family=\"Arial,sans-serif\" font-size=\"32\" font-weight=\"bold\" fill=\"#FFFFFF\" text-anchor=\"middle\" dominant-baseline=\"middle\">$category</text></svg>"
+    
+    // Кодируем SVG в data URI (base64 для надежности)
+    val base64Svg = android.util.Base64.encodeToString(
+        svg.toByteArray(Charsets.UTF_8),
+        android.util.Base64.NO_WRAP
+    )
+    
+    return "data:image/svg+xml;base64,$base64Svg"
 }
 
 
