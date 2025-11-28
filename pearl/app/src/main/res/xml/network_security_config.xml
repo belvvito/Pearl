@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Разрешаем cleartext трафик для локального сервера разработки -->
+    <domain-config cleartextTrafficPermitted="true">
+        <!-- Для Android эмулятора -->
+        <domain includeSubdomains="true">10.0.2.2</domain>
+        <!-- Для реального устройства (локальная сеть) -->
+        <domain includeSubdomains="true">192.168.0.18</domain>
+        <domain includeSubdomains="true">192.168.0.0</domain>
+        <domain includeSubdomains="true">192.168.1.0</domain>
+        <domain includeSubdomains="true">127.0.0.1</domain>
+        <domain includeSubdomains="true">localhost</domain>
+    </domain-config>
+    
+    <!-- Разрешаем HTTPS для внешних доменов (Unsplash и т.д.) -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">images.unsplash.com</domain>
+        <domain includeSubdomains="true">via.placeholder.com</domain>
+        <domain includeSubdomains="true">unpkg.com</domain>
+        <domain includeSubdomains="true">tile.openstreetmap.org</domain>
+        <domain includeSubdomains="true">nominatim.openstreetmap.org</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
+    
+    <!-- Для локальной разработки разрешаем HTTP (cleartext) -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
+
